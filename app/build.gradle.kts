@@ -24,7 +24,7 @@ android {
         }
     }
 
-    val releaseSigning = signingConfigs.create("release") {
+    val releaseSigningConfig = signingConfigs.create("release") {
         val storeFilePath = System.getenv("SIGNING_STORE_FILE")
         val storePasswordEnv = System.getenv("SIGNING_STORE_PASSWORD")
         val keyAliasEnv = System.getenv("SIGNING_KEY_ALIAS")
@@ -63,12 +63,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            if (releaseSigning.storeFile != null &&
-                !releaseSigning.storePassword.isNullOrBlank() &&
-                !releaseSigning.keyAlias.isNullOrBlank() &&
-                !releaseSigning.keyPassword.isNullOrBlank()
+            if (releaseSigningConfig.storeFile != null &&
+                !releaseSigningConfig.storePassword.isNullOrBlank() &&
+                !releaseSigningConfig.keyAlias.isNullOrBlank() &&
+                !releaseSigningConfig.keyPassword.isNullOrBlank()
             ) {
-                signingConfig = releaseSigning
+                signingConfig = releaseSigningConfig
             }
         }
     }
