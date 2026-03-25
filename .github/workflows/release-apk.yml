@@ -1,4 +1,4 @@
-name: Build Release APK
+Name: Build Release APK
 
 on:
   workflow_dispatch:
@@ -26,10 +26,11 @@ jobs:
 
       - name: Decode signing keystore
         env:
-          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          # 使用你的变量名：SIGNING_KEY
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEY }}
         run: |
           if [ -z "$SIGNING_KEYSTORE_BASE64" ]; then
-            echo "Missing required secret: SIGNING_KEYSTORE_BASE64"
+            echo "Missing required secret: SIGNING_KEY"
             exit 1
           fi
           echo "$SIGNING_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
@@ -37,9 +38,12 @@ jobs:
       - name: Build signed release APK
         env:
           SIGNING_STORE_FILE: ${{ runner.temp }}/release.keystore
-          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
-          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
-          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          # 使用你的变量名：KEY_STORE_PASSWORD
+          SIGNING_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+          # 使用你的变量名：ALIAS
+          SIGNING_KEY_ALIAS: ${{ secrets.ALIAS }}
+          # 使用你的变量名：KEY_PASSWORD
+          SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew :app:assembleRelease
 
       - name: Upload release APK artifact
