@@ -5,6 +5,8 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+import java.util.Properties
+
 android {
     namespace = "cn.aeolusdev.pkgpu"
     compileSdk = 35
@@ -22,6 +24,38 @@ android {
         }
     }
 
+    val releaseSigning = signingConfigs.create("release") {
+        val storeFilePath = System.getenv("SIGNING_STORE_FILE")
+        val storePasswordEnv = System.getenv("SIGNING_STORE_PASSWORD")
+        val keyAliasEnv = System.getenv("SIGNING_KEY_ALIAS")
+        val keyPasswordEnv = System.getenv("SIGNING_KEY_PASSWORD")
+
+        if (!storeFilePath.isNullOrBlank() &&
+            !storePasswordEnv.isNullOrBlank() &&
+            !keyAliasEnv.isNullOrBlank() &&
+            !keyPasswordEnv.isNullOrBlank()
+        ) {
+            storeFile = file(storeFilePath)
+            storePassword = storePasswordEnv
+            keyAlias = keyAliasEnv
+            keyPassword = keyPasswordEnv
+        } else {
+            val propsFile = rootProject.file("keystore.properties")
+            if (propsFile.exists()) {
+                val props = Properties().apply {
+                    propsFile.inputStream().use { load(it) }
+                }
+                val localStoreFile = props.getProperty("storeFile")
+                if (!localStoreFile.isNullOrBlank()) {
+                    storeFile = file(localStoreFile)
+                    storePassword = props.getProperty("storePassword")
+                    keyAlias = props.getProperty("keyAlias")
+                    keyPassword = props.getProperty("keyPassword")
+                }
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -29,6 +63,13 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (releaseSigning.storeFile != null &&
+                !releaseSigning.storePassword.isNullOrBlank() &&
+                !releaseSigning.keyAlias.isNullOrBlank() &&
+                !releaseSigning.keyPassword.isNullOrBlank()
+            ) {
+                signingConfig = releaseSigning
+            }
         }
     }
     compileOptions {
