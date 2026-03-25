@@ -1,6 +1,7 @@
 package cn.aeolusdev.pkgpu
 
 import android.content.Context
+import android.util.Log
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.Credentials
@@ -11,6 +12,9 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 
 class Storage(private val context: Context) {
+    companion object {
+        private const val TAG = "PkgPuStorage"
+    }
     private val json = Json {
         prettyPrint = true
         ignoreUnknownKeys = true
@@ -25,7 +29,10 @@ class Storage(private val context: Context) {
             save(defaultData)
             return defaultData
         }
-        return runCatching { json.decodeFromString<AppData>(file.readText()) }.getOrElse { AppData() }
+        return runCatching { json.decodeFromString<AppData>(file.readText()) }.getOrElse {
+            Log.e(TAG, "本地数据解析失败，已回退默认空数据", it)
+            AppData()
+        }
     }
 
     fun save(data: AppData) {
@@ -37,6 +44,9 @@ class Storage(private val context: Context) {
 }
 
 class WebDavSyncClient {
+    companion object {
+        private const val TAG = "PkgPuWebDav"
+    }
     private val json = Json { ignoreUnknownKeys = true }
     private val client = OkHttpClient()
 
@@ -62,10 +72,15 @@ class WebDavSyncClient {
         val request = Request.Builder().url(url).header("Authorization", auth).get().build()
         return runCatching {
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return null
+                if (!response.isSuccessful) {
+                    Log.w(TAG, "拉取云端数据失败: HTTP ${response.code}")
+                    return null
+                }
                 val body = response.body?.string() ?: return null
                 json.decodeFromString<AppData>(body)
             }
+        }.onFailure {
+            Log.e(TAG, "拉取云端数据异常", it)
         }.getOrNull()
     }
 
@@ -73,7 +88,13 @@ class WebDavSyncClient {
         val body = json.encodeToString(data).toRequestBody("application/json; charset=utf-8".toMediaType())
         val request = Request.Builder().url(url).header("Authorization", auth).put(body).build()
         runCatching {
-            client.newCall(request).execute().close()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    Log.w(TAG, "上传云端数据失败: HTTP ${response.code}")
+                }
+            }
+        }.onFailure {
+            Log.e(TAG, "上传云端数据异常", it)
         }
     }
 }

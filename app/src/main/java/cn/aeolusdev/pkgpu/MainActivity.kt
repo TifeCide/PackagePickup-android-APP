@@ -21,9 +21,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.time.LocalTime
 
@@ -78,7 +79,7 @@ private fun AppScreen(vm: MainViewModel) {
                     NavigationBarItem(
                         selected = tab == it,
                         onClick = {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             tab = it
                         },
                         icon = { Text(if (it == Tab.HOME) "🏠" else if (it == Tab.RECENT) "🕒" else "⚙️") },
@@ -271,7 +272,7 @@ private fun SettingsTab(modifier: Modifier, data: AppData, vm: MainViewModel) {
             Button(onClick = { addingStation = true }) { Text("新增站点") }
         }
 
-        item { Divider() }
+        item { HorizontalDivider() }
 
         item {
             Text("云同步", style = MaterialTheme.typography.titleMedium)
@@ -359,9 +360,9 @@ private fun StationDialog(
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = stationId, onValueChange = { stationId = it }, label = { Text("StationID") })
-                OutlinedTextField(value = alias, onValueChange = { alias = it }, label = { Text("Alias") })
-                OutlinedTextField(value = openTime, onValueChange = { openTime = it }, label = { Text("OpenTime 例如 08:00-22:00") })
+                OutlinedTextField(value = stationId, onValueChange = { stationId = it }, label = { Text("站点编号") })
+                OutlinedTextField(value = alias, onValueChange = { alias = it }, label = { Text("站点名称") })
+                OutlinedTextField(value = openTime, onValueChange = { openTime = it }, label = { Text("营业时间（例如 08:00-22:00）") })
             }
         },
         confirmButton = {
