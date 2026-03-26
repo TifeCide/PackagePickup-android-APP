@@ -72,3 +72,15 @@ object StationSorter {
         }
     }
 }
+
+object SyncStatusText {
+    fun homeButton(status: SyncStatus): String {
+        return when (status) {
+            SyncStatus.SYNCING -> "同步中"
+            SyncStatus.FAILED -> "同步失败"
+            SyncStatus.OFFLINE -> "未连接网络"
+            SyncStatus.SUCCESS -> "同步"
+            SyncStatus.IDLE -> "同步"
+        }
+    }
+}

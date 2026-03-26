@@ -16,6 +16,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _data = MutableStateFlow(storage.load())
     val data: StateFlow<AppData> = _data.asStateFlow()
+    private val _syncStatus = MutableStateFlow(SyncStatus.IDLE)
+    val syncStatus: StateFlow<SyncStatus> = _syncStatus.asStateFlow()
 
     init {
         syncFromCloud()
@@ -23,19 +25,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun syncFromCloud() {
         viewModelScope.launch {
+            _syncStatus.value = SyncStatus.SYNCING
             val synced = withContext(Dispatchers.IO) {
                 syncClient.sync(_data.value, _data.value.cloudConfig)
             }
-            _data.value = synced
+            _data.value = synced.data
             withContext(Dispatchers.IO) {
-                storage.save(synced)
+                storage.save(synced.data)
             }
+            _syncStatus.value = synced.status
         }
     }
 
     fun saveCloudConfig(config: CloudConfig) {
         _data.value = _data.value.copy(cloudConfig = config, updatedAt = System.currentTimeMillis())
         persist()
+        if (!config.enabled) {
+            _syncStatus.value = SyncStatus.IDLE
+        }
     }
 
     fun upsertStation(station: Station) {
@@ -73,7 +80,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             addTime = System.currentTimeMillis()
         )
         _data.value = _data.value.copy(packages = _data.value.packages + entry, updatedAt = System.currentTimeMillis())
-        persist()
+        persistAndAutoSync()
     }
 
     fun markPicked(packageNo: Int, pickAllInStation: Boolean) {
@@ -86,12 +93,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } else it
         }
         _data.value = _data.value.copy(packages = updated, updatedAt = now)
-        persist()
+        persistAndAutoSync()
+    }
+
+    fun clearAllPackages() {
+        _data.value = _data.value.copy(packages = emptyList(), updatedAt = System.currentTimeMillis())
+        persistAndAutoSync()
     }
 
     private fun persist() {
         viewModelScope.launch(Dispatchers.IO) {
             storage.save(_data.value)
         }
+    }
+
+    private fun persistAndAutoSync() {
+        persist()
+        syncFromCloud()
     }
 }

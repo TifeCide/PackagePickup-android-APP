@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,9 +21,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -68,6 +69,7 @@ private enum class Tab(val label: String) { HOME("主页"), RECENT("最近取件
 @Composable
 private fun AppScreen(vm: MainViewModel) {
     val data by vm.data.collectAsStateWithLifecycle()
+    val syncStatus by vm.syncStatus.collectAsStateWithLifecycle()
     var tab by remember { mutableStateOf(Tab.HOME) }
     val haptic = LocalHapticFeedback.current
 
@@ -90,7 +92,7 @@ private fun AppScreen(vm: MainViewModel) {
         }
     ) { padding ->
         when (tab) {
-            Tab.HOME -> HomeTab(modifier = Modifier.padding(padding), data = data, vm = vm)
+            Tab.HOME -> HomeTab(modifier = Modifier.padding(padding), data = data, syncStatus = syncStatus, vm = vm)
             Tab.RECENT -> RecentTab(modifier = Modifier.padding(padding), data = data)
             Tab.SETTINGS -> SettingsTab(modifier = Modifier.padding(padding), data = data, vm = vm)
         }
@@ -98,62 +100,74 @@ private fun AppScreen(vm: MainViewModel) {
 }
 
 @Composable
-private fun HomeTab(modifier: Modifier, data: AppData, vm: MainViewModel) {
+private fun HomeTab(modifier: Modifier, data: AppData, syncStatus: SyncStatus, vm: MainViewModel) {
     val waiting = data.packages.filter { !it.picked }
     val stationOrder = StationSorter.sort(data.stations, waiting, LocalTime.now())
     var addForStation by remember { mutableStateOf<Station?>(null) }
     var pickPrompt by remember { mutableStateOf<PackageEntry?>(null) }
+    var expanded by remember(stationOrder) { mutableStateOf(stationOrder.associate { it.stationId to true }) }
+    val syncUi = SyncUiMapper.homeButton(syncStatus)
 
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(modifier = Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            item {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Button(
+                        onClick = { vm.syncFromCloud() },
+                        colors = ButtonDefaults.buttonColors(containerColor = syncUi.containerColor)
+                    ) {
+                        Text(syncUi.text)
+                    }
+                }
+            }
             items(stationOrder, key = { it.stationId }) { station ->
                 val stationPackages = waiting.filter { it.inStation == station.stationId }
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(if (StationSorter.isOpen(station.openTime)) Color.Unspecified else Color.LightGray.copy(alpha = 0.25f))
-                            .padding(12.dp),
+                            .background(Color(0xFFDCE4F5))
+                            .padding(10.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { expanded = expanded + (station.stationId to !(expanded[station.stationId] ?: true)) },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(text = "${station.alias}（${station.stationId}）", style = MaterialTheme.typography.titleMedium)
-                                Text(text = "营业时段：${station.openTime.ifBlank { "未设置" }}")
-                                Text(text = "待取包裹：${stationPackages.size}")
-                            }
-                            FloatingActionButton(onClick = { addForStation = station }) {
-                                Text("+")
-                            }
-                        }
-                        if (stationPackages.isEmpty()) {
-                            Text("暂无待取包裹")
-                        } else {
-                            stationPackages.sortedBy { it.addTime }.forEach { pkg ->
-                                PackageCard(pkg, showPickedTime = false) {
-                                    val sameStationCount = stationPackages.count()
-                                    if (sameStationCount > 1) {
-                                        pickPrompt = pkg
-                                    } else {
-                                        vm.markPicked(pkg.packageNo, false)
-                                    }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(text = station.alias, style = MaterialTheme.typography.titleLarge)
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(
+                                        text = "${stationPackages.size}待取",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = Color(0xFFF4AE00)
+                                    )
                                 }
+                            }
+                            TextButton(onClick = { addForStation = station }) { Text("+") }
+                            Text(if (expanded[station.stationId] == false) "▸" else "▾", style = MaterialTheme.typography.titleLarge)
+                        }
+                        if (expanded[station.stationId] != false) {
+                            stationPackages.sortedBy { it.addTime }.forEach { pkg ->
+                                HomePackageRow(pkg = pkg, onPick = {
+                                    if (stationPackages.size > 1) pickPrompt = pkg else vm.markPicked(pkg.packageNo, false)
+                                })
                             }
                         }
                     }
                 }
             }
-        }
-
-        if (addForStation != null) {
-            AddPackageDialog(
-                station = addForStation!!,
-                onDismiss = { addForStation = null },
-                onConfirm = { tracking, code, memo, company ->
-                    vm.addPackage(addForStation!!.stationId, tracking, code, memo, company)
-                    addForStation = null
+            item {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                    Button(
+                        onClick = { vm.clearAllPackages() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD50000))
+                    ) { Text("清除全部") }
                 }
-            )
+            }
         }
 
         if (pickPrompt != null) {
@@ -174,6 +188,70 @@ private fun HomeTab(modifier: Modifier, data: AppData, vm: MainViewModel) {
                     }) { Text("仅当前") }
                 }
             )
+        }
+
+        if (addForStation != null) {
+            AddPackageDialog(
+                station = addForStation!!,
+                onDismiss = { addForStation = null },
+                onConfirm = { tracking, code, memo, company ->
+                    vm.addPackage(addForStation!!.stationId, tracking, code, memo, company)
+                    addForStation = null
+                }
+            )
+        }
+    }
+}
+
+private data class SyncHomeButtonUi(
+    val text: String,
+    val containerColor: Color
+)
+
+private object SyncUiMapper {
+    fun homeButton(status: SyncStatus): SyncHomeButtonUi {
+        val color = when (status) {
+            SyncStatus.SYNCING -> Color(0xFF6A9AFD)
+            SyncStatus.FAILED -> Color(0xFFD65F5F)
+            SyncStatus.OFFLINE -> Color(0xFF8A8A8A)
+            SyncStatus.SUCCESS,
+            SyncStatus.IDLE -> Color(0xFF7D7D7D)
+        }
+        return SyncHomeButtonUi(SyncStatusText.homeButton(status), color)
+    }
+}
+
+@Composable
+private fun HomePackageRow(pkg: PackageEntry, onPick: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = pkg.pickupCode.ifBlank { "暂无取件码" },
+                    style = MaterialTheme.typography.titleLarge,
+                    color = if (pkg.pickupCode.isBlank()) Color(0xFFB54E00) else Color(0xFFC95A00)
+                )
+                Text(
+                    text = if (pkg.memo.isBlank()) "暂无备注" else pkg.memo,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.Gray
+                )
+                val courierInfo = listOf(pkg.deliveryCompany, pkg.trackingNo).filter { it.isNotBlank() }.joinToString("：")
+                Text(
+                    text = courierInfo.ifBlank { "未知承运商" },
+                    color = Color.Gray
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .width(42.dp)
+                    .height(42.dp)
+                    .background(Color(0xFFFFE8D6))
+                    .clickable { onPick() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("✔", color = Color(0xFF6A35C1))
+            }
         }
     }
 }
@@ -282,37 +360,42 @@ private fun SettingsTab(modifier: Modifier, data: AppData, vm: MainViewModel) {
                 Spacer(Modifier.width(8.dp))
                 Switch(checked = cloud.enabled, onCheckedChange = { cloud = cloud.copy(enabled = it) })
             }
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("坚果云预设")
-                Spacer(Modifier.width(8.dp))
-                Switch(
-                    checked = cloud.provider == "nutstore",
-                    onCheckedChange = {
-                        cloud = if (it) {
-                            cloud.copy(provider = "nutstore", url = "https://dav.jianguoyun.com/dav/")
-                        } else {
-                            cloud.copy(provider = "custom")
+            if (cloud.enabled) {
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("坚果云预设")
+                    Spacer(Modifier.width(8.dp))
+                    Switch(
+                        checked = cloud.provider == "nutstore",
+                        onCheckedChange = {
+                            cloud = if (it) {
+                                cloud.copy(provider = "nutstore", url = "https://dav.jianguoyun.com/dav/")
+                            } else {
+                                cloud.copy(provider = "custom")
+                            }
                         }
-                    }
+                    )
+                }
+                OutlinedTextField(value = cloud.url, onValueChange = { cloud = cloud.copy(url = it) }, label = { Text("网址") })
+                OutlinedTextField(value = cloud.username, onValueChange = { cloud = cloud.copy(username = it) }, label = { Text("账号") })
+                OutlinedTextField(
+                    value = cloud.password,
+                    onValueChange = { cloud = cloud.copy(password = it) },
+                    label = { Text("密码") },
+                    visualTransformation = PasswordVisualTransformation()
                 )
-            }
-            OutlinedTextField(value = cloud.url, onValueChange = { cloud = cloud.copy(url = it) }, label = { Text("网址") })
-            OutlinedTextField(value = cloud.username, onValueChange = { cloud = cloud.copy(username = it) }, label = { Text("账号") })
-            OutlinedTextField(
-                value = cloud.password,
-                onValueChange = { cloud = cloud.copy(password = it) },
-                label = { Text("密码") },
-                visualTransformation = PasswordVisualTransformation()
-            )
-            OutlinedTextField(value = cloud.remotePath, onValueChange = { cloud = cloud.copy(remotePath = it) }, label = { Text("云端文件路径") })
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { vm.saveCloudConfig(cloud) }) { Text("保存配置") }
-                Button(onClick = {
-                    vm.saveCloudConfig(cloud)
-                    vm.syncFromCloud()
-                }) { Text("立即同步") }
+                OutlinedTextField(value = cloud.remotePath, onValueChange = { cloud = cloud.copy(remotePath = it) }, label = { Text("云端文件路径") })
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { vm.saveCloudConfig(cloud) }) { Text("保存配置") }
+                    Button(onClick = {
+                        vm.saveCloudConfig(cloud)
+                        vm.syncFromCloud()
+                    }) { Text("立即同步") }
+                }
+            } else {
+                Spacer(Modifier.height(8.dp))
+                Text("已收起，启用后展开配置项。", color = Color.Gray)
             }
         }
     }
