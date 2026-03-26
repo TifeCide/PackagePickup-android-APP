@@ -28,4 +28,12 @@ class DomainTest {
         assertEquals("已入站：6小时", TimeUtils.elapsedText(now - 6L * 60L * 60L * 1000L, now))
         assertEquals("已入站：2天", TimeUtils.elapsedText(now - 48L * 60L * 60L * 1000L, now))
     }
+
+    @Test
+    fun `sync status text maps to chinese labels`() {
+        assertEquals("同步", SyncStatusText.homeButton(SyncStatus.IDLE))
+        assertEquals("同步中", SyncStatusText.homeButton(SyncStatus.SYNCING))
+        assertEquals("同步失败", SyncStatusText.homeButton(SyncStatus.FAILED))
+        assertEquals("未连接网络", SyncStatusText.homeButton(SyncStatus.OFFLINE))
+    }
 }
